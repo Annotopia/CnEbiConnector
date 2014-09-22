@@ -20,9 +20,20 @@
  */
 package org.annotopia.grails.connectors.plugin.ebi.services
 
+import java.util.HashMap;
+
+import org.annotopia.grails.connectors.ITextMiningService
+import org.codehaus.groovy.grails.web.json.JSONObject;
+
 /**
  * @author Paolo Ciccarese <paolo.ciccarese@gmail.com>
  */
-class EbiService {
+class EbiService implements ITextMiningService {
 
+	@Override
+	public JSONObject textmine(String resourceUri, String content, HashMap parametrization) {
+		log.info 'textmine:Resource: ' + resourceUri + ' Content: ' + content + ' Parametrization: ' + parametrization
+		
+		//TODO Logic 
+	}
 }

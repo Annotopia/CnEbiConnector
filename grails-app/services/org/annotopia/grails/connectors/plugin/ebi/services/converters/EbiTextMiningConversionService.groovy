@@ -20,9 +20,20 @@
  */
 package org.annotopia.grails.connectors.plugin.ebi.services.converters
 
+import java.text.SimpleDateFormat;
+
+import org.codehaus.groovy.grails.web.json.JSONObject;
+
 /**
  * @author Paolo Ciccarese <paolo.ciccarese@gmail.com>
  */
 class EbiTextMiningConversionService {
 
+	public static final String RETURN_FORMAT = "annotopia";
+	
+	SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
+	
+	JSONObject convert(def apiKey, def url, def text, def results) {
+		
+	}
 }
