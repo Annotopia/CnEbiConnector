@@ -14,9 +14,14 @@ grails.project.dependency.resolution = {
     legacyResolve false // whether to do a secondary resolve on plugin installation, not advised and here for backwards compatibility
     repositories {
         grailsCentral()
+		mavenCentral()
 		mavenRepo "http://repository.codehaus.org/"
     }
     dependencies {
+		compile ("org.apache.jena:jena-core:2.12.0") {
+			excludes 'slf4j-api', 'xercesImpl'
+		}
+		compile ("org.apache.jena:jena-arq:2.12.0")
     }
 
     plugins {
