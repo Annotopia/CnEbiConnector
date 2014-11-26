@@ -52,6 +52,10 @@ environments {
 				   'net.sf.ehcache.hibernate'
 		
 			warn   'org.mortbay.log'
+			
+			trace  'grails.app',
+			       'grails.app.services.org.annotopia.grails.connectors.plugin.ebi.EbiService',
+			       'org.annotopia.grails.connectors.plugin.ebi.tests'
 		}
 	}
 }
