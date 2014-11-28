@@ -39,14 +39,17 @@ class EbiController extends BaseConnectorController {
 	def configAccessService
 	def apiKeyAuthenticationService
 	
+	/**
+	 * curl -i -X POST http://localhost:8090/cn/ebi/textmine -H "Content-Type: application/json" -d'{"apiKey":"164bb0e0-248f-11e4-8c21-0800200c9a66","pmcid":"PMC1240580"}'
+	 */
 	def textmine = {
 		long startTime = System.currentTimeMillis( );
 		
 		// retrieve the API key
 		def apiKey = retrieveApiKey(startTime);
-//		if(!apiKey) {
-//			return;
-//		}
+		if(!apiKey) {
+			return;
+		}
 		
 		// retrieve the resource
 		def pmcid = retrieveValue(request.JSON.pmcid, params.pmcid,
@@ -59,19 +62,20 @@ class EbiController extends BaseConnectorController {
 		parameters.put("pmcid", pmcid);
 		
 		List<Model> models = ebiService.retrieve("", parameters);
-		
-		log.warn configAccessService.getAsString("annotopia.jsonld.openannotation.framing")
-		
+
 		Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey, 
 			configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
 		
-		for(Model model: models) {
+		response.outputStream << '{"items":[';
+		for(int i=0; i<models.size(); i++) {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			RDFDataMgr.write(baos, model.getGraph(), RDFLanguages.JSONLD);
+			RDFDataMgr.write(baos, models.get(i).getGraph(), RDFLanguages.JSONLD);
 			
 			Object framed =  JsonLdProcessor.frame(JsonUtils.fromString(baos.toString().replace('"@id" : "urn:x-arq:DefaultGraphNode",','')), contextJson, new JsonLdOptions());
 			response.outputStream << JsonUtils.toPrettyString(framed)
+			if(i<models.size()-1) response.outputStream << ','
 		}
+		response.outputStream << ']}';
 	}
 	
 	/**
