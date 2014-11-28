@@ -62,7 +62,8 @@ class EbiController extends BaseConnectorController {
 		
 		log.warn configAccessService.getAsString("annotopia.jsonld.openannotation.framing")
 		
-		Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey, configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
+		Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey, 
+			configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
 		
 		for(Model model: models) {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();

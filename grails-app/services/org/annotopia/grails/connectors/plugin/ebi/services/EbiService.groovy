@@ -104,19 +104,7 @@ class EbiService extends BaseConnectorService {
 							 model.read(new ByteArrayInputStream(xml.getBytes()), null);
 							 
 							 log.error model.size();
-							 
-//							 List<Resource> annotations = new ArrayList<Resource>();
-//							 StmtIterator iter = model.listStatements(
-//								 null,  
-//								 ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), 
-//								 ResourceFactory.createResource("http://www.w3.org/ns/oa#Annotation"));
-//							 while(iter.hasNext()) {
-//								 Statement s = iter.next();
-//								 annotations.add(s.getSubject());
-//							 }
-							 
-//							 log.error annotations.size();
-							 
+
 							 List<Resource> annotations = new ArrayList<Resource>();
 							 List<Resource> specificTargets = new ArrayList<Resource>();
 							 StmtIterator specificTargetsIterator = model.listStatements(
@@ -164,6 +152,24 @@ class EbiService extends BaseConnectorService {
 										null);
 									 while(annotationStatementsIterator.hasNext()) {
 										 annotationModel.add(annotationStatementsIterator.next());
+										 
+										 // TODO Add hasBody statements
+										 StmtIterator annotationBodyStatementIterator = model.listStatements(
+											 CURRENT_ANNOTATION,
+											 ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasBody"),
+											 null);
+										 while(annotationBodyStatementIterator.hasNext()) {
+											 StmtIterator annotationBodyStatementsIterator = model.listStatements(
+												 annotationBodyStatementIterator.next().getObject(),
+												 null,
+												 null);
+											 while(annotationBodyStatementsIterator.hasNext()) {
+												 annotationModel.add(annotationBodyStatementsIterator.next());
+											 }
+										 }
+										 
+										 
+										 // TODO Add annotatedBy statements
 									 }
 									 // Specific targets statements
 									 StmtIterator annotationSpecificTargetIterator = model.listStatements(
@@ -184,11 +190,7 @@ class EbiService extends BaseConnectorService {
 								 log.info outputStream.toString();
 								 log.info '------------'
 							 }
-							 
 							 return models;
-							 //ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-							 //RDFDataMgr.write(outputStream, model, RDFLanguages.JSONLD);
-							 //outputStream.toString();
 						}
 						
 						response.'404' = { resp ->
