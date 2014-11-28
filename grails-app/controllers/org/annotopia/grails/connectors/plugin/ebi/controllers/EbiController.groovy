@@ -66,7 +66,11 @@ class EbiController extends BaseConnectorController {
 		Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey, 
 			configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
 		
-		response.outputStream << '{"items":[';
+		def summaryPrefix = '"total":"' + models.size() + '", ' +
+			'"duration": "' + (System.currentTimeMillis()-startTime) + 'ms", ' +
+			'"items":[';
+		
+		response.outputStream << '{"status":"results", "result": {' + summaryPrefix;
 		for(int i=0; i<models.size(); i++) {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			RDFDataMgr.write(baos, models.get(i).getGraph(), RDFLanguages.JSONLD);
@@ -75,7 +79,7 @@ class EbiController extends BaseConnectorController {
 			response.outputStream << JsonUtils.toPrettyString(framed)
 			if(i<models.size()-1) response.outputStream << ','
 		}
-		response.outputStream << ']}';
+		response.outputStream << ']}}';
 	}
 	
 	/**
