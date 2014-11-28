@@ -26,8 +26,13 @@ import groovyx.net.http.Method
 
 import org.annotopia.grails.connectors.BaseConnectorService
 import org.annotopia.grails.connectors.ConnectorHttpResponseException
+import org.apache.jena.riot.RDFDataMgr
+import org.apache.jena.riot.RDFLanguages
 import org.codehaus.groovy.grails.web.json.JSONObject
 
+import com.github.jsonldjava.core.JsonLdOptions
+import com.github.jsonldjava.core.JsonLdProcessor
+import com.github.jsonldjava.utils.JsonUtils
 import com.hp.hpl.jena.rdf.model.Model
 import com.hp.hpl.jena.rdf.model.ModelFactory
 import com.hp.hpl.jena.rdf.model.Resource
@@ -68,14 +73,14 @@ class EbiService extends BaseConnectorService {
 	def connectorsConfigAccessService;
 	
 	@Override
-	public JSONObject retrieve(String resourceUri, HashMap parametrization) {
+	public List<Model> retrieve(String resourceUri, HashMap parametrization) {
 		log.info 'textmine:Resource: ' + resourceUri + ' Parametrization: ' + parametrization
 		
 		try {
 			String pmcid = parametrization.get("pmcid");
 			def url = EBI_TM_ERVICE_URL;
 			if(pmcid != null) {
-				url += "?contexts=_:" + pmcid;
+				url += "?context=_:" + pmcid;
 				
 				log.info 'url ' + url
 				
@@ -93,42 +98,94 @@ class EbiService extends BaseConnectorService {
 	
 							//log.info  "XML was ${xml}"
 							
+							List<Model> models = new ArrayList<Model>();
+							
 							 final Model model = ModelFactory.createDefaultModel();
 							 model.read(new ByteArrayInputStream(xml.getBytes()), null);
 							 
 							 log.error model.size();
 							 
+//							 List<Resource> annotations = new ArrayList<Resource>();
+//							 StmtIterator iter = model.listStatements(
+//								 null,  
+//								 ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), 
+//								 ResourceFactory.createResource("http://www.w3.org/ns/oa#Annotation"));
+//							 while(iter.hasNext()) {
+//								 Statement s = iter.next();
+//								 annotations.add(s.getSubject());
+//							 }
+							 
+//							 log.error annotations.size();
+							 
 							 List<Resource> annotations = new ArrayList<Resource>();
-							 StmtIterator iter = model.listStatements(
-								 null,  
-								 ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), 
-								 ResourceFactory.createResource("http://www.w3.org/ns/oa#Annotation"));
-							 while(iter.hasNext()) {
-								 Statement s = iter.next();
-								 annotations.add(s.getSubject());
-							 }
-							 
-							 log.error annotations.size();
-							 
 							 List<Resource> specificTargets = new ArrayList<Resource>();
-							 StmtIterator iter2 = model.listStatements(
+							 StmtIterator specificTargetsIterator = model.listStatements(
 								 null,
 								 ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasSource"),
 								 ResourceFactory.createResource("http://europepmc.org/articles/" + pmcid));
-							 while(iter2.hasNext()) {
-								 Statement s = iter2.next();
-								 specificTargets.add(s.getSubject());
+							 while(specificTargetsIterator.hasNext()) {
+								 Model annotationModel = ModelFactory.createDefaultModel();
 								 
-								 log.info '----> ' + s.getSubject()
-								 StmtIterator iter2a = model.listStatements(
+								 Statement specificTargetStatement = specificTargetsIterator.next();
+								 Resource CURRENT_SPECIFIC_TARGET = specificTargetStatement.getSubject();
+								 
+								 StmtIterator selectorResourceIterator = model.listStatements(
+									 CURRENT_SPECIFIC_TARGET,
+									 ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasSelector"),
+									 null);
+								 while(selectorResourceIterator.hasNext()) {
+									 Statement selectorStatement = selectorResourceIterator.next();
+									 Resource CURRENT_SELECTOR = selectorStatement.getObject();
+									 
+									 StmtIterator selectorStatementIterator = model.listStatements(
+										 CURRENT_SELECTOR,
+										 null,
+										 null);
+									 while(selectorStatementIterator.hasNext()) {
+										 annotationModel.add(selectorStatementIterator.next());
+									 }
+								 }
+								 
+								 StmtIterator annotationsIterator = model.listStatements(
 									 null,
 									 ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasTarget"),
-									 s.getSubject());
-								 while(iter2a.hasNext()) {
-									 log.info iter2a.next();
+									 specificTargetStatement.getSubject());
+								 while(annotationsIterator.hasNext()) {
+									 Statement annotationStatement = annotationsIterator.next();
+									 Resource CURRENT_ANNOTATION = annotationStatement.getSubject();
+									 annotations.add(CURRENT_ANNOTATION);
+									 
+									 log.error '-=========== ' + CURRENT_ANNOTATION
+									 
+									 // Annotations statements
+									 StmtIterator annotationStatementsIterator = model.listStatements(
+										CURRENT_ANNOTATION,
+										null,
+										null);
+									 while(annotationStatementsIterator.hasNext()) {
+										 annotationModel.add(annotationStatementsIterator.next());
+									 }
+									 // Specific targets statements
+									 StmtIterator annotationSpecificTargetIterator = model.listStatements(
+										 CURRENT_SPECIFIC_TARGET,
+										 null,
+										 null);
+									 while(annotationSpecificTargetIterator.hasNext()) {
+										 annotationModel.add(annotationSpecificTargetIterator.next());
+									 }
+									 // Selectors statements
+									 
 								 }
+								 
+								 models.add(annotationModel);
+								 
+								 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+								 RDFDataMgr.write(outputStream, annotationModel, RDFLanguages.JSONLD);
+								 log.info outputStream.toString();
+								 log.info '------------'
 							 }
 							 
+							 return models;
 							 //ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 							 //RDFDataMgr.write(outputStream, model, RDFLanguages.JSONLD);
 							 //outputStream.toString();

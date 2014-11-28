@@ -20,12 +20,89 @@
  */
 package org.annotopia.grails.connectors.plugin.ebi.controllers
 
+import org.annotopia.grails.connectors.BaseConnectorController
+import org.apache.jena.riot.RDFDataMgr
+import org.apache.jena.riot.RDFLanguages
+
+import com.github.jsonldjava.core.JsonLdOptions
+import com.github.jsonldjava.core.JsonLdProcessor
+import com.github.jsonldjava.utils.JsonUtils
+import com.hp.hpl.jena.rdf.model.Model
+
+
 /**
  * @author Paolo Ciccarese <paolo.ciccarese@gmail.com>
  */
-class EbiController {
+class EbiController extends BaseConnectorController {
 
+	def ebiService
+	def configAccessService
+	def apiKeyAuthenticationService
+	
 	def textmine = {
+		long startTime = System.currentTimeMillis( );
 		
+		// retrieve the API key
+		def apiKey = retrieveApiKey(startTime);
+//		if(!apiKey) {
+//			return;
+//		}
+		
+		// retrieve the resource
+		def pmcid = retrieveValue(request.JSON.pmcid, params.pmcid,
+			"pmcid", startTime);
+		if(!pmcid) {
+			return;
+		}
+		
+		HashMap parameters = new HashMap( );
+		parameters.put("pmcid", pmcid);
+		
+		List<Model> models = ebiService.retrieve("", parameters);
+		
+		log.warn configAccessService.getAsString("annotopia.jsonld.openannotation.framing")
+		
+		Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey, configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
+		
+		for(Model model: models) {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			RDFDataMgr.write(baos, model.getGraph(), RDFLanguages.JSONLD);
+			
+			Object framed =  JsonLdProcessor.frame(JsonUtils.fromString(baos.toString().replace('"@id" : "urn:x-arq:DefaultGraphNode",','')), contextJson, new JsonLdOptions());
+			response.outputStream << JsonUtils.toPrettyString(framed)
+		}
+	}
+	
+	/**
+	 * Method for calling external URLs with or without proxy.
+	 * @param agentKey 	The agent key for logging
+	 * @param URL		The external URL to call
+	 * @return The InputStream of the external URL.
+	 */
+	private InputStream callExternalUrl(def agentKey, String URL) {
+		Proxy httpProxy = null;
+		if(grailsApplication.config.annotopia.server.proxy.host && grailsApplication.config.annotopia.server.proxy.port) {
+			String proxyHost = configAccessService.getAsString("annotopia.server.proxy.host"); //replace with your proxy server name or IP
+			int proxyPort = configAccessService.getAsString("annotopia.server.proxy.port").toInteger(); //your proxy server port
+			SocketAddress addr = new InetSocketAddress(proxyHost, proxyPort);
+			httpProxy = new Proxy(Proxy.Type.HTTP, addr);
+		}
+		
+		if(httpProxy!=null) {
+			long startTime = System.currentTimeMillis();
+			logInfo(agentKey, "Proxy request: " + URL);
+			URL url = new URL(URL);
+			URLConnection urlConn = url.openConnection(httpProxy);
+			urlConn.connect();
+			logInfo(agentKey, "Proxy resolved in (" + (System.currentTimeMillis()-startTime) + "ms)");
+			return urlConn.getInputStream();
+		} else {
+			logInfo(agentKey, "No proxy request: " + URL);
+			return new URL(URL).openStream();
+		}
+	}
+	
+	private def logInfo(def userId, message) {
+		log.info(":" + userId + ": " + message);
 	}
 }

@@ -24,9 +24,10 @@ import static org.junit.Assert.*
 import grails.test.mixin.TestFor
 
 import org.annotopia.grails.connectors.plugin.ebi.services.EbiService
-import org.codehaus.groovy.grails.web.json.JSONObject
 import org.junit.BeforeClass
 import org.junit.Test
+
+import com.hp.hpl.jena.rdf.model.Model
 
 /** 
  * JUnit test case for the term search.
@@ -50,7 +51,7 @@ class EbiServiceTest {
 		HashMap parameters = new HashMap( );
 		parameters.put("pmcid", "PMC1240580");
 
-		JSONObject result = ebiService.retrieve("url", parameters);
+		List<Model> result = ebiService.retrieve("url", parameters);
 		//log.info(result);
 		assertNotNull(result);
 	}
