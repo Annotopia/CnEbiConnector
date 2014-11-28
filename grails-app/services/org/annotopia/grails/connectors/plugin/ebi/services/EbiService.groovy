@@ -142,9 +142,7 @@ class EbiService extends BaseConnectorService {
 									 Statement annotationStatement = annotationsIterator.next();
 									 Resource CURRENT_ANNOTATION = annotationStatement.getSubject();
 									 annotations.add(CURRENT_ANNOTATION);
-									 
-									 log.error '-=========== ' + CURRENT_ANNOTATION
-									 
+
 									 // Annotations statements
 									 StmtIterator annotationStatementsIterator = model.listStatements(
 										CURRENT_ANNOTATION,
@@ -153,7 +151,7 @@ class EbiService extends BaseConnectorService {
 									 while(annotationStatementsIterator.hasNext()) {
 										 annotationModel.add(annotationStatementsIterator.next());
 										 
-										 // TODO Add hasBody statements
+										 // Handling of Semantic Tags
 										 StmtIterator annotationBodyStatementIterator = model.listStatements(
 											 CURRENT_ANNOTATION,
 											 ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasBody"),
@@ -166,11 +164,41 @@ class EbiService extends BaseConnectorService {
 											 while(annotationBodyStatementsIterator.hasNext()) {
 												 annotationModel.add(annotationBodyStatementsIterator.next());
 											 }
-										 }
+										 }									 
 										 
+										 // Add annotatedBy statements	
+										 def annotatedBy = ResourceFactory.createResource("http://wwwdev.ebi.ac.uk/webservices/europepmc/");					 
+										 annotationModel.add(
+											 annotatedBy,
+											 ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+											 ResourceFactory.createResource("http://xmlns.com/foaf/0.1/Software"));
+										 annotationModel.add(
+											 annotatedBy,
+											 ResourceFactory.createProperty("http://www.w3.org/2000/01/rdf-schema#label"),
+											 ResourceFactory.createPlainLiteral("EBI Pre-computed text mining"));
 										 
-										 // TODO Add annotatedBy statements
+										 annotationModel.add(
+											 CURRENT_ANNOTATION, 
+											 ResourceFactory.createProperty("http://www.w3.org/ns/oa#annotatedBy"), 
+											 annotatedBy);
+										 
+										 // Add serializedBy statements
+										 def serializedBy = ResourceFactory.createResource("http://annotopia.org");
+										 annotationModel.add(
+											 serializedBy,
+											 ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+											 ResourceFactory.createResource("http://xmlns.com/foaf/0.1/Software"));
+										 annotationModel.add(
+											 serializedBy,
+											 ResourceFactory.createProperty("http://www.w3.org/2000/01/rdf-schema#label"),
+											 ResourceFactory.createPlainLiteral("Annotopia"));
+										 
+										 annotationModel.add(
+											 CURRENT_ANNOTATION,
+											 ResourceFactory.createProperty("http://www.w3.org/ns/oa#serializedBy"),
+											 serializedBy);
 									 }
+									 
 									 // Specific targets statements
 									 StmtIterator annotationSpecificTargetIterator = model.listStatements(
 										 CURRENT_SPECIFIC_TARGET,
@@ -179,6 +207,7 @@ class EbiService extends BaseConnectorService {
 									 while(annotationSpecificTargetIterator.hasNext()) {
 										 annotationModel.add(annotationSpecificTargetIterator.next());
 									 }
+									 
 									 // Selectors statements
 									 
 								 }
