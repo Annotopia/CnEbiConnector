@@ -30,6 +30,11 @@ environments {
 		           'net.sf.ehcache.hibernate'
 		
 		    warn   'org.mortbay.log'
+			
+			trace  'grails.app',
+				'grails.app.services.org.annotopia.grails.connectors.plugin.ebi.EbiService',
+				'grails.app.controllers.org.annotopia.grails.connectors.plugin.ebi.controllers.EbiController',
+				'org.annotopia.grails.connectors.plugin.ebi.tests'
 		}
 	}
 	test {
@@ -55,6 +60,7 @@ environments {
 			
 			trace  'grails.app',
 			       'grails.app.services.org.annotopia.grails.connectors.plugin.ebi.EbiService',
+				   'grails.app.controllers.org.annotopia.grails.connectors.plugin.ebi.controllers.EbiController',
 			       'org.annotopia.grails.connectors.plugin.ebi.tests'
 		}
 	}
