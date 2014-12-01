@@ -32,17 +32,30 @@ import com.hp.hpl.jena.rdf.model.Model
 
 
 /**
+ * The controller connects to some EBI (European Bioinformatics Institute) 
+ * services that have been made available in relation to Euro Pubmed Central 
+ * content. At the moment this is connecting to one service that provides
+ * precomputed text mining results on Euro Pubmed Central Abstracts.
+ * 
+ * The results are normalized to the Open Annotation format in the spirit
+ * of the Annotopia connectors framework.
+ * 
  * @author Paolo Ciccarese <paolo.ciccarese@gmail.com>
  */
 class EbiController extends BaseConnectorController {
 
-	def ebiService
 	def configAccessService
 	def apiKeyAuthenticationService
+	
+	def ebiService
 	def ebiTextMiningDomeoConversionService
 	
 	/**
+	 * curl -i -X POST http://localhost:8090/cn/ebi/textmine -H "Content-Type: application/json" -d'{"apiKey":"164bb0e0-248f-11e4-8c21-0800200c9a66","pmcid":"PMC3622585"}'
+	 * curl -i -X POST http://localhost:8090/cn/ebi/textmine -H "Content-Type: application/json" -d'{"apiKey":"164bb0e0-248f-11e4-8c21-0800200c9a66","pmcid":"PMC3622585","format":"domeo"}'
 	 * curl -i -X POST http://localhost:8090/cn/ebi/textmine -H "Content-Type: application/json" -d'{"apiKey":"164bb0e0-248f-11e4-8c21-0800200c9a66","pmcid":"PMC1240580"}'
+	 * 
+	 * curl -i -X POST http://localhost:8090/cn/ebi/textmine -H "Content-Type: application/json" -d'{"apiKey":"164bb0e0-248f-11e4-8c21-0800200c9a66","pmcid":"PMC1240580"}' > results.out
 	 */
 	def textmine = {
 		long startTime = System.currentTimeMillis( );
@@ -62,7 +75,7 @@ class EbiController extends BaseConnectorController {
 		
 		// retrieve the format
 		def format = retrieveValue(request.JSON.format, params.format,
-			"format", startTime);
+			"annotopia");
 		
 		HashMap parameters = new HashMap( );
 		parameters.put("pmcid", pmcid);
