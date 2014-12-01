@@ -71,9 +71,10 @@ class EbiService extends BaseConnectorService {
 	
 	/** The configuration options for this service. */
 	def connectorsConfigAccessService;
+	def ebiTextMiningDomeoConversionService;
 	
-	@Override
-	public List<Model> retrieve(String resourceUri, HashMap parametrization) {
+
+	public def retrieveResults(String resourceUri, HashMap parametrization) {
 		log.info 'textmine:Resource: ' + resourceUri + ' Parametrization: ' + parametrization
 		
 		try {
@@ -96,10 +97,201 @@ class EbiService extends BaseConnectorService {
 						response.success = { resp, xml ->
 							long duration = System.currentTimeMillis( ) - startTime;
 	
-							//log.info  "XML was ${xml}"
+							// Reads the RDF in XML format into a Model
+							final Model model = ModelFactory.createDefaultModel();
+							model.read(new ByteArrayInputStream(xml.getBytes()), null);
 							
 							List<Model> models = new ArrayList<Model>();
+							List<Resource> annotations = new ArrayList<Resource>();
+							List<Resource> specificTargets = new ArrayList<Resource>();
+							StmtIterator specificTargetsIterator = model.listStatements(
+								null,
+								ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasSource"),
+								ResourceFactory.createResource("http://europepmc.org/articles/" + pmcid));
+							while(specificTargetsIterator.hasNext()) {
+								Model annotationModel = ModelFactory.createDefaultModel();
+								
+								Statement specificTargetStatement = specificTargetsIterator.next();
+								Resource CURRENT_SPECIFIC_TARGET = specificTargetStatement.getSubject();
+								
+								StmtIterator selectorResourceIterator = model.listStatements(
+									CURRENT_SPECIFIC_TARGET,
+									ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasSelector"),
+									null);
+								while(selectorResourceIterator.hasNext()) {
+									Statement selectorStatement = selectorResourceIterator.next();
+									Resource CURRENT_SELECTOR = selectorStatement.getObject();
+									
+									StmtIterator selectorStatementIterator = model.listStatements(
+										CURRENT_SELECTOR,
+										null,
+										null);
+									while(selectorStatementIterator.hasNext()) {
+										annotationModel.add(selectorStatementIterator.next());
+									}
+								}
+								
+								StmtIterator annotationsIterator = model.listStatements(
+									null,
+									ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasTarget"),
+									specificTargetStatement.getSubject());
+								while(annotationsIterator.hasNext()) {
+									Statement annotationStatement = annotationsIterator.next();
+									Resource CURRENT_ANNOTATION = annotationStatement.getSubject();
+									annotations.add(CURRENT_ANNOTATION);
+
+									// Annotations statements
+									StmtIterator annotationStatementsIterator = model.listStatements(
+									   CURRENT_ANNOTATION,
+									   null,
+									   null);
+									while(annotationStatementsIterator.hasNext()) {
+										annotationModel.add(annotationStatementsIterator.next());
+										
+										// Handling of Semantic Tags
+										StmtIterator annotationBodyStatementIterator = model.listStatements(
+											CURRENT_ANNOTATION,
+											ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasBody"),
+											null);
+										while(annotationBodyStatementIterator.hasNext()) {
+											StmtIterator annotationBodyStatementsIterator = model.listStatements(
+												annotationBodyStatementIterator.next().getObject(),
+												null,
+												null);
+											while(annotationBodyStatementsIterator.hasNext()) {
+												annotationModel.add(annotationBodyStatementsIterator.next());
+											}
+										}
+										
+										// Add annotatedBy statements
+										def annotatedBy = ResourceFactory.createResource("http://wwwdev.ebi.ac.uk/webservices/europepmc/");
+										annotationModel.add(
+											annotatedBy,
+											ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+											ResourceFactory.createResource("http://xmlns.com/foaf/0.1/Software"));
+										annotationModel.add(
+											annotatedBy,
+											ResourceFactory.createProperty("http://www.w3.org/2000/01/rdf-schema#label"),
+											ResourceFactory.createPlainLiteral("EBI Pre-computed text mining"));
+										
+										annotationModel.add(
+											CURRENT_ANNOTATION,
+											ResourceFactory.createProperty("http://www.w3.org/ns/oa#annotatedBy"),
+											annotatedBy);
+										
+										// Add serializedBy statements
+										def serializedBy = ResourceFactory.createResource("http://annotopia.org");
+										annotationModel.add(
+											serializedBy,
+											ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+											ResourceFactory.createResource("http://xmlns.com/foaf/0.1/Software"));
+										annotationModel.add(
+											serializedBy,
+											ResourceFactory.createProperty("http://www.w3.org/2000/01/rdf-schema#label"),
+											ResourceFactory.createPlainLiteral("Annotopia"));
+										
+										annotationModel.add(
+											CURRENT_ANNOTATION,
+											ResourceFactory.createProperty("http://www.w3.org/ns/oa#serializedBy"),
+											serializedBy);
+									}
+									
+									// Specific targets statements
+									StmtIterator annotationSpecificTargetIterator = model.listStatements(
+										CURRENT_SPECIFIC_TARGET,
+										null,
+										null);
+									while(annotationSpecificTargetIterator.hasNext()) {
+										annotationModel.add(annotationSpecificTargetIterator.next());
+									}
+									
+									// Selectors statements
+									
+								}								
+								models.add(annotationModel);
 							
+							//log.info  "XML was ${xml}"
+							if(parametrization.get("format")=="domeo") {
+								return ebiTextMiningDomeoConversionService.convert("", resourceUri, "", xml);
+							} else {
+							
+								
+								
+								
+								 
+								 log.error model.size();
+	
+								
+									 
+									 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+									 RDFDataMgr.write(outputStream, annotationModel, RDFLanguages.JSONLD);
+									 log.info outputStream.toString();
+									 log.info '------------'
+								 }
+								 return models;
+							}
+						}
+						
+						response.'404' = { resp ->
+							log.error('Not found: ' + resp.getStatusLine())
+							throw new ConnectorHttpResponseException(resp, 404, 'Service not found. The problem has been reported')
+						}
+					 
+						response.'503' = { resp ->
+							log.error('Not available: ' + resp.getStatusLine())
+							throw new ConnectorHttpResponseException(resp, 503, 'Service temporarily not available. Try again later.')
+						}
+						
+						response.failure = { resp, xml ->
+							log.error('failure: ' + resp.getStatusLine())
+							throw new ConnectorHttpResponseException(resp, resp.getStatusLine())
+						}
+					}
+				} catch (groovyx.net.http.HttpResponseException ex) {
+					log.error("HttpResponseException: Service " + ex.getMessage())
+					throw new RuntimeException(ex);
+				} catch (java.net.ConnectException ex) {
+					log.error("ConnectException: " + ex.getMessage())
+					throw new RuntimeException(ex);
+				}
+				
+			} else {
+				log.error('Not pmcid specified')
+				//throw new ConnectorHttpResponseException(resp, 400, 'Missing required parameter: pmc')
+			}
+		} catch(Exception e) {
+			JSONObject returnMessage = new JSONObject();
+			returnMessage.put("error", e.getMessage());
+			log.error("Exception: " + e.getMessage() + " " + e.getClass().getName());
+			return returnMessage;
+		}
+	}
+	
+	public List<Model> retrieve(String resourceUri, HashMap parametrization) {
+		log.info 'textmine:Resource: ' + resourceUri + ' Parametrization: ' + parametrization
+		
+		try {
+			String pmcid = parametrization.get("pmcid");
+			def url = EBI_TM_ERVICE_URL;
+			if(pmcid != null) {
+				url += "?context=_:" + pmcid;
+				
+				log.info 'url ' + url
+				
+				// perform the query
+				long startTime = System.currentTimeMillis( );
+				try {
+					def http = new HTTPBuilder(url);
+					evaluateProxy(http, url);
+		
+					http.request(Method.GET, "application/rdf+xml;charset=UTF-8") {
+						requestContentType = ContentType.URLENC
+						
+						response.success = { resp, xml ->
+							long duration = System.currentTimeMillis( ) - startTime;
+
+							List<Model> models = new ArrayList<Model>();
+								
 							 final Model model = ModelFactory.createDefaultModel();
 							 model.read(new ByteArrayInputStream(xml.getBytes()), null);
 							 
@@ -130,7 +322,12 @@ class EbiService extends BaseConnectorService {
 										 null,
 										 null);
 									 while(selectorStatementIterator.hasNext()) {
-										 annotationModel.add(selectorStatementIterator.next());
+										 Statement s = selectorStatementIterator.next();
+										 if(s.getPredicate().toString()=="http://www.w3.org/ns/oa#postfix") {
+											 annotationModel.add(s.getSubject(), ResourceFactory.createProperty("http://www.w3.org/ns/oa#suffix"), s.getObject());
+										 } else {
+										 	 annotationModel.add(s);
+										 }
 									 }
 								 }
 								 
@@ -214,10 +411,10 @@ class EbiService extends BaseConnectorService {
 								 
 								 models.add(annotationModel);
 								 
-								 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-								 RDFDataMgr.write(outputStream, annotationModel, RDFLanguages.JSONLD);
-								 log.info outputStream.toString();
-								 log.info '------------'
+								 //ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+								 //RDFDataMgr.write(outputStream, annotationModel, RDFLanguages.JSONLD);
+								 //log.info outputStream.toString();
+								 //log.info '------------'
 							 }
 							 return models;
 						}

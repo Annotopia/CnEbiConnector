@@ -23,6 +23,7 @@ package org.annotopia.grails.connectors.plugin.ebi.controllers
 import org.annotopia.grails.connectors.BaseConnectorController
 import org.apache.jena.riot.RDFDataMgr
 import org.apache.jena.riot.RDFLanguages
+import org.codehaus.groovy.grails.web.json.JSONObject
 
 import com.github.jsonldjava.core.JsonLdOptions
 import com.github.jsonldjava.core.JsonLdProcessor
@@ -38,6 +39,7 @@ class EbiController extends BaseConnectorController {
 	def ebiService
 	def configAccessService
 	def apiKeyAuthenticationService
+	def ebiTextMiningDomeoConversionService
 	
 	/**
 	 * curl -i -X POST http://localhost:8090/cn/ebi/textmine -H "Content-Type: application/json" -d'{"apiKey":"164bb0e0-248f-11e4-8c21-0800200c9a66","pmcid":"PMC1240580"}'
@@ -58,28 +60,94 @@ class EbiController extends BaseConnectorController {
 			return;
 		}
 		
+		// retrieve the format
+		def format = retrieveValue(request.JSON.format, params.format,
+			"format", startTime);
+		
 		HashMap parameters = new HashMap( );
 		parameters.put("pmcid", pmcid);
-		
-		List<Model> models = ebiService.retrieve("", parameters);
+		if(format) parameters.put("format", format);
 
-		Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey, 
-			configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
-		
-		def summaryPrefix = '"total":"' + models.size() + '", ' +
-			'"duration": "' + (System.currentTimeMillis()-startTime) + 'ms", ' +
-			'"items":[';
-		
-		response.outputStream << '{"status":"results", "result": {' + summaryPrefix;
-		for(int i=0; i<models.size(); i++) {
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			RDFDataMgr.write(baos, models.get(i).getGraph(), RDFLanguages.JSONLD);
+		if(format=="domeo") {
+			List<Model> models = (List<Model>)ebiService.retrieve("", parameters);
 			
-			Object framed =  JsonLdProcessor.frame(JsonUtils.fromString(baos.toString().replace('"@id" : "urn:x-arq:DefaultGraphNode",','')), contextJson, new JsonLdOptions());
-			response.outputStream << JsonUtils.toPrettyString(framed)
-			if(i<models.size()-1) response.outputStream << ','
+			JSONObject results = ebiTextMiningDomeoConversionService.convert("", models, "");
+			
+			response.outputStream << results.toString();
+		} else {
+			List<Model> models = (List<Model>)ebiService.retrieve("", parameters);
+	
+			Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey,
+				configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
+			
+			def summaryPrefix = '"total":"' + models.size() + '", ' +
+				'"duration": "' + (System.currentTimeMillis()-startTime) + 'ms", ' +
+				'"items":[';
+			
+			response.outputStream << '{"status":"results", "result": {' + summaryPrefix;
+			for(int i=0; i<models.size(); i++) {
+				ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				RDFDataMgr.write(baos, models.get(i).getGraph(), RDFLanguages.JSONLD);
+				
+				Object framed =  JsonLdProcessor.frame(JsonUtils.fromString(baos.toString().replace('"@id" : "urn:x-arq:DefaultGraphNode",','')), contextJson, new JsonLdOptions());
+				response.outputStream << JsonUtils.toPrettyString(framed)
+				if(i<models.size()-1) response.outputStream << ','
+			}
+			response.outputStream << ']}}';
 		}
-		response.outputStream << ']}}';
+	}
+	
+	/**
+	 * curl -i -X POST http://localhost:8090/cn/ebi/textmine -H "Content-Type: application/json" -d'{"apiKey":"164bb0e0-248f-11e4-8c21-0800200c9a66","pmcid":"PMC1240580"}'
+	 */
+	def textmineold = {
+		long startTime = System.currentTimeMillis( );
+		
+		// retrieve the API key
+		def apiKey = retrieveApiKey(startTime);
+		if(!apiKey) {
+			return;
+		}
+		
+		// retrieve the resource
+		def pmcid = retrieveValue(request.JSON.pmcid, params.pmcid,
+			"pmcid", startTime);
+		if(!pmcid) {
+			return;
+		}
+		
+		// retrieve the format
+		def format = retrieveValue(request.JSON.format, params.format,
+			"format", startTime);
+		
+		HashMap parameters = new HashMap( );
+		parameters.put("pmcid", pmcid);
+
+		if(format=="domeo") {
+			parameters.put("format", format);
+			
+			response.outputStream << ebiService.retrieve("", parameters);
+		} else {
+			List<Model> models = (List<Model>)ebiService.retrieve("", parameters);
+	
+			Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey, 
+				configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
+			
+			def summaryPrefix = '"total":"' + models.size() + '", ' +
+				'"duration": "' + (System.currentTimeMillis()-startTime) + 'ms", ' +
+				'"items":[';
+			
+			response.outputStream << '{"status":"results", "result": {' + summaryPrefix;
+			for(int i=0; i<models.size(); i++) {
+				ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				RDFDataMgr.write(baos, models.get(i).getGraph(), RDFLanguages.JSONLD);
+				
+				Object framed =  JsonLdProcessor.frame(JsonUtils.fromString(baos.toString().replace('"@id" : "urn:x-arq:DefaultGraphNode",','')), contextJson, new JsonLdOptions());
+				response.outputStream << JsonUtils.toPrettyString(framed)
+				if(i<models.size()-1) response.outputStream << ','
+			}
+			response.outputStream << ']}}';
+		}
 	}
 	
 	/**
