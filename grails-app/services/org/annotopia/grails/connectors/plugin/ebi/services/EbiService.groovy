@@ -20,12 +20,15 @@
  */
 package org.annotopia.grails.connectors.plugin.ebi.services
 
+import java.io.InputStream;
+
 import groovyx.net.http.ContentType
 import groovyx.net.http.HTTPBuilder
 import groovyx.net.http.Method
 
 import org.annotopia.grails.connectors.BaseConnectorService
 import org.annotopia.grails.connectors.ConnectorHttpResponseException
+import org.annotopia.grails.connectors.ITextMiningService
 import org.apache.jena.riot.RDFDataMgr
 import org.apache.jena.riot.RDFLanguages
 import org.codehaus.groovy.grails.web.json.JSONObject
@@ -70,194 +73,40 @@ class EbiService extends BaseConnectorService {
 	private final static String EBI_TM_ERVICE_URL = "http://wwwdev.ebi.ac.uk/webservices/europepmc/openrdf-sesame/repositories/europepmc/statements";
 	
 	/** The configuration options for this service. */
+	def grailsApplication;
+	def configAccessService;
 	def connectorsConfigAccessService;
 	def ebiTextMiningDomeoConversionService;
 	
-
-	public def retrieveResults(String resourceUri, HashMap parametrization) {
-		log.info 'textmine:Resource: ' + resourceUri + ' Parametrization: ' + parametrization
+	public String textmine(def response, String resourceUri, String content, HashMap parameters) {
+		
+		// perform the query
+		long startTime = System.currentTimeMillis( );
 		
 		try {
-			String pmcid = parametrization.get("pmcid");
-			def url = EBI_TM_ERVICE_URL;
-			if(pmcid != null) {
-				url += "?context=_:" + pmcid;
-				
-				log.info 'url ' + url
-				
-				// perform the query
-				long startTime = System.currentTimeMillis( );
-				try {
-					def http = new HTTPBuilder(url);
-					evaluateProxy(http, url);
-		
-					http.request(Method.GET, "application/rdf+xml;charset=UTF-8") {
-						requestContentType = ContentType.URLENC
-						
-						response.success = { resp, xml ->
-							long duration = System.currentTimeMillis( ) - startTime;
-	
-							// Reads the RDF in XML format into a Model
-							final Model model = ModelFactory.createDefaultModel();
-							model.read(new ByteArrayInputStream(xml.getBytes()), null);
-							
-							List<Model> models = new ArrayList<Model>();
-							List<Resource> annotations = new ArrayList<Resource>();
-							List<Resource> specificTargets = new ArrayList<Resource>();
-							StmtIterator specificTargetsIterator = model.listStatements(
-								null,
-								ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasSource"),
-								ResourceFactory.createResource("http://europepmc.org/articles/" + pmcid));
-							while(specificTargetsIterator.hasNext()) {
-								Model annotationModel = ModelFactory.createDefaultModel();
-								
-								Statement specificTargetStatement = specificTargetsIterator.next();
-								Resource CURRENT_SPECIFIC_TARGET = specificTargetStatement.getSubject();
-								
-								StmtIterator selectorResourceIterator = model.listStatements(
-									CURRENT_SPECIFIC_TARGET,
-									ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasSelector"),
-									null);
-								while(selectorResourceIterator.hasNext()) {
-									Statement selectorStatement = selectorResourceIterator.next();
-									Resource CURRENT_SELECTOR = selectorStatement.getObject();
-									
-									StmtIterator selectorStatementIterator = model.listStatements(
-										CURRENT_SELECTOR,
-										null,
-										null);
-									while(selectorStatementIterator.hasNext()) {
-										annotationModel.add(selectorStatementIterator.next());
-									}
-								}
-								
-								StmtIterator annotationsIterator = model.listStatements(
-									null,
-									ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasTarget"),
-									specificTargetStatement.getSubject());
-								while(annotationsIterator.hasNext()) {
-									Statement annotationStatement = annotationsIterator.next();
-									Resource CURRENT_ANNOTATION = annotationStatement.getSubject();
-									annotations.add(CURRENT_ANNOTATION);
-
-									// Annotations statements
-									StmtIterator annotationStatementsIterator = model.listStatements(
-									   CURRENT_ANNOTATION,
-									   null,
-									   null);
-									while(annotationStatementsIterator.hasNext()) {
-										annotationModel.add(annotationStatementsIterator.next());
-										
-										// Handling of Semantic Tags
-										StmtIterator annotationBodyStatementIterator = model.listStatements(
-											CURRENT_ANNOTATION,
-											ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasBody"),
-											null);
-										while(annotationBodyStatementIterator.hasNext()) {
-											StmtIterator annotationBodyStatementsIterator = model.listStatements(
-												annotationBodyStatementIterator.next().getObject(),
-												null,
-												null);
-											while(annotationBodyStatementsIterator.hasNext()) {
-												annotationModel.add(annotationBodyStatementsIterator.next());
-											}
-										}
-										
-										// Add annotatedBy statements
-										def annotatedBy = ResourceFactory.createResource("http://wwwdev.ebi.ac.uk/webservices/europepmc/");
-										annotationModel.add(
-											annotatedBy,
-											ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-											ResourceFactory.createResource("http://xmlns.com/foaf/0.1/Software"));
-										annotationModel.add(
-											annotatedBy,
-											ResourceFactory.createProperty("http://www.w3.org/2000/01/rdf-schema#label"),
-											ResourceFactory.createPlainLiteral("EBI Pre-computed text mining"));
-										
-										annotationModel.add(
-											CURRENT_ANNOTATION,
-											ResourceFactory.createProperty("http://www.w3.org/ns/oa#annotatedBy"),
-											annotatedBy);
-										
-										// Add serializedBy statements
-										def serializedBy = ResourceFactory.createResource("http://annotopia.org");
-										annotationModel.add(
-											serializedBy,
-											ResourceFactory.createProperty("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-											ResourceFactory.createResource("http://xmlns.com/foaf/0.1/Software"));
-										annotationModel.add(
-											serializedBy,
-											ResourceFactory.createProperty("http://www.w3.org/2000/01/rdf-schema#label"),
-											ResourceFactory.createPlainLiteral("Annotopia"));
-										
-										annotationModel.add(
-											CURRENT_ANNOTATION,
-											ResourceFactory.createProperty("http://www.w3.org/ns/oa#serializedBy"),
-											serializedBy);
-									}
-									
-									// Specific targets statements
-									StmtIterator annotationSpecificTargetIterator = model.listStatements(
-										CURRENT_SPECIFIC_TARGET,
-										null,
-										null);
-									while(annotationSpecificTargetIterator.hasNext()) {
-										annotationModel.add(annotationSpecificTargetIterator.next());
-									}
-									
-									// Selectors statements
-									
-								}								
-								models.add(annotationModel);
-							
-							//log.info  "XML was ${xml}"
-							if(parametrization.get("format")=="domeo") {
-								return ebiTextMiningDomeoConversionService.convert("", resourceUri, "", xml);
-							} else {
-							
-								
-								
-								
-								 
-								 log.error model.size();
-	
-								
-									 
-									 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-									 RDFDataMgr.write(outputStream, annotationModel, RDFLanguages.JSONLD);
-									 log.info outputStream.toString();
-									 log.info '------------'
-								 }
-								 return models;
-							}
-						}
-						
-						response.'404' = { resp ->
-							log.error('Not found: ' + resp.getStatusLine())
-							throw new ConnectorHttpResponseException(resp, 404, 'Service not found. The problem has been reported')
-						}
-					 
-						response.'503' = { resp ->
-							log.error('Not available: ' + resp.getStatusLine())
-							throw new ConnectorHttpResponseException(resp, 503, 'Service temporarily not available. Try again later.')
-						}
-						
-						response.failure = { resp, xml ->
-							log.error('failure: ' + resp.getStatusLine())
-							throw new ConnectorHttpResponseException(resp, resp.getStatusLine())
-						}
-					}
-				} catch (groovyx.net.http.HttpResponseException ex) {
-					log.error("HttpResponseException: Service " + ex.getMessage())
-					throw new RuntimeException(ex);
-				} catch (java.net.ConnectException ex) {
-					log.error("ConnectException: " + ex.getMessage())
-					throw new RuntimeException(ex);
-				}
-				
+			def format = parameters.get("format");
+			List<Model> models = (List<Model>) retrieve("", parameters);
+			if(format=="domeo") {
+				JSONObject results = ebiTextMiningDomeoConversionService.convert("", models, "");
+				response.outputStream << results.toString()
 			} else {
-				log.error('Not pmcid specified')
-				//throw new ConnectorHttpResponseException(resp, 400, 'Missing required parameter: pmc')
+				Object contextJson = JsonUtils.fromInputStream(callExternalUrl(apiKey,
+					configAccessService.getAsString("annotopia.jsonld.openannotation.framing")));
+				
+				def summaryPrefix = '"total":"' + models.size() + '", ' +
+					'"duration": "' + (System.currentTimeMillis()-startTime) + 'ms", ' +
+					'"items":[';
+				
+				response.outputStream << '{"status":"results", "result": {' + summaryPrefix;
+				for(int i=0; i<models.size(); i++) {
+					ByteArrayOutputStream baos = new ByteArrayOutputStream();
+					RDFDataMgr.write(baos, models.get(i).getGraph(), RDFLanguages.JSONLD);
+					
+					Object framed =  JsonLdProcessor.frame(JsonUtils.fromString(baos.toString().replace('"@id" : "urn:x-arq:DefaultGraphNode",','')), contextJson, new JsonLdOptions());
+					response.outputStream << JsonUtils.toPrettyString(framed)
+					if(i<models.size()-1) response.outputStream << ','
+				}
+				response.outputStream << ']}}';
 			}
 		} catch(Exception e) {
 			JSONObject returnMessage = new JSONObject();
@@ -346,7 +195,15 @@ class EbiService extends BaseConnectorService {
 										null,
 										null);
 									 while(annotationStatementsIterator.hasNext()) {
-										 annotationModel.add(annotationStatementsIterator.next());
+										 Statement annStatement = annotationStatementsIterator.next();
+										
+										 String tagLabel = null;
+										 
+										 if(annStatement.getPredicate().toString()=="http://www.w3.org/2000/01/rdf-schema#label") {
+											 tagLabel = annStatement.getLiteral().getString();
+										 } else {
+											annotationModel.add(annStatement);
+										 }
 										 
 										 // Handling of Semantic Tags
 										 StmtIterator annotationBodyStatementIterator = model.listStatements(
@@ -354,13 +211,16 @@ class EbiService extends BaseConnectorService {
 											 ResourceFactory.createProperty("http://www.w3.org/ns/oa#hasBody"),
 											 null);
 										 while(annotationBodyStatementIterator.hasNext()) {
+											 Statement sBody = annotationBodyStatementIterator.next()
 											 StmtIterator annotationBodyStatementsIterator = model.listStatements(
-												 annotationBodyStatementIterator.next().getObject(),
+												 sBody.getObject(),
 												 null,
 												 null);
 											 while(annotationBodyStatementsIterator.hasNext()) {
 												 annotationModel.add(annotationBodyStatementsIterator.next());
 											 }
+											 if(tagLabel!=null)
+											 annotationModel.add(sBody.getObject(),  ResourceFactory.createProperty("http://www.w3.org/2000/01/rdf-schema#label"), ResourceFactory.createPlainLiteral(tagLabel));
 										 }									 
 										 
 										 // Add annotatedBy statements	
@@ -454,5 +314,38 @@ class EbiService extends BaseConnectorService {
 		}
 		
 		//TODO Logic 
+	}
+
+	/**
+	 * Method for calling external URLs with or without proxy.
+	 * @param agentKey 	The agent key for logging
+	 * @param URL		The external URL to call
+	 * @return The InputStream of the external URL.
+	 */
+	private InputStream callExternalUrl(def agentKey, String URL) {
+		Proxy httpProxy = null;
+		if(grailsApplication.config.annotopia.server.proxy.host && grailsApplication.config.annotopia.server.proxy.port) {
+			String proxyHost = configAccessService.getAsString("annotopia.server.proxy.host"); //replace with your proxy server name or IP
+			int proxyPort = configAccessService.getAsString("annotopia.server.proxy.port").toInteger(); //your proxy server port
+			SocketAddress addr = new InetSocketAddress(proxyHost, proxyPort);
+			httpProxy = new Proxy(Proxy.Type.HTTP, addr);
+		}
+		
+		if(httpProxy!=null) {
+			long startTime = System.currentTimeMillis();
+			logInfo(agentKey, "Proxy request: " + URL);
+			URL url = new URL(URL);
+			URLConnection urlConn = url.openConnection(httpProxy);
+			urlConn.connect();
+			logInfo(agentKey, "Proxy resolved in (" + (System.currentTimeMillis()-startTime) + "ms)");
+			return urlConn.getInputStream();
+		} else {
+			logInfo(agentKey, "No proxy request: " + URL);
+			return new URL(URL).openStream();
+		}
+	}
+	
+	private def logInfo(def userId, message) {
+		log.info(":" + userId + ": " + message);
 	}
 }

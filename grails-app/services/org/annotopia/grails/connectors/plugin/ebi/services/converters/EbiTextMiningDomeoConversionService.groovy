@@ -50,6 +50,7 @@ import com.hp.hpl.jena.rdf.model.StmtIterator
 /**
  * @author Paolo Ciccarese <paolo.ciccarese@gmail.com>
  */
+@Deprecated
 class EbiTextMiningDomeoConversionService extends BaseTextMiningConversionService {
 
 	public static final String RETURN_FORMAT = "domeo";
@@ -102,7 +103,6 @@ class EbiTextMiningDomeoConversionService extends BaseTextMiningConversionServic
 			def annotationInJsonString = JsonUtils.toPrettyString(framed)	
 			
 			JSONObject annotationJson = JSON.parse(annotationInJsonString);
-			println "************** " + annotationJson;
 			
 			JSONObject annotation = new JSONObject( );
 			annotation.put(IOJsonLd.jsonLdId, URN_ANNOTATION_PREFIX + UUID.uuid( ));
@@ -117,9 +117,15 @@ class EbiTextMiningDomeoConversionService extends BaseTextMiningConversionServic
 			
 			// body
 			JSONObject body = new JSONObject( );
-			body.put(IORdfs.label, annotationJson["@graph"][0]["hasBody"]["@id"]);
 			body.put(IOJsonLd.jsonLdId, annotationJson["@graph"][0]["hasBody"]["@id"]);
-
+			
+			if(annotationJson["@graph"][0]["hasBody"]["label"]) {
+				body.put(IORdfs.label, annotationJson["@graph"][0]["hasBody"]["label"]);
+			} else {
+				log.warn("Label not found for " + annotationJson["@graph"][0]["hasBody"]["@id"]);
+				body.put(IORdfs.label, annotationJson["@graph"][0]["hasBody"]["@id"]);
+			}
+			
 			// source
 			JSONObject source = new JSONObject( );
 			source.put(IORdfs.label, "EBI Annotator");
@@ -145,7 +151,7 @@ class EbiTextMiningDomeoConversionService extends BaseTextMiningConversionServic
 			JSONObject target = new JSONObject( );
 			target.put(IOJsonLd.jsonLdId, URN_SPECIFIC_RESOURCE_PREFIX + UUID.uuid( ));
 			target.put(IOJsonLd.jsonLdType, "ao:SpecificResource");
-			target.put("ao:hasSource", snippetUrn);
+			target.put("ao:hasSource", annotationJson["@graph"][0]["hasTarget"]["hasSource"]);
 			target.put("ao:hasSelector", selector);
 			JSONArray context = new JSONArray( );
 			context.add(target);
@@ -227,5 +233,23 @@ class EbiTextMiningDomeoConversionService extends BaseTextMiningConversionServic
 	
 	private def logInfo(def userId, message) {
 		log.info(":" + userId + ": " + message);
+	}
+	
+	/**
+	 * It creates a JSON object for the connector agent (software).
+	 * @param uri	The Agent URI
+	 * @param label	The Agent label
+	 * @param name	The Agent name, can be the same as the label
+	 * @param ver	The Agent version
+	 * @return Create the connector agent content.
+	 */
+	protected JSONObject getSoftwareAgent(String uri, String label, String name, String ver) {
+		JSONObject result = new JSONObject( );
+		result.put(IOJsonLd.jsonLdId, uri);
+		result.put(IOJsonLd.jsonLdType, "foafx:Software");
+		result.put(IORdfs.label, label);
+		result.put("foafx:name", name);
+		result.put(IOPav.version, ver);
+		return result;
 	}
 }
