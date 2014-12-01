@@ -66,7 +66,7 @@ class EbiTextMiningDomeoConversionService extends BaseTextMiningConversionServic
 		JSONObject result = new JSONObject( );
 		result.put(IOJsonLd.jsonLdId, URN_ANNOTATION_SET_PREFIX + UUID.uuid( ));
 		result.put(IOJsonLd.jsonLdType, "ao:AnnotationSet");
-		result.put(IORdfs.label, "EBI Annotator Results");
+		result.put(IORdfs.label, "EBI Annotator Precomputed Results");
 		result.put(IODublinCoreTerms.description, "EBI Annotator Results");
 		
 		// agents
@@ -109,7 +109,7 @@ class EbiTextMiningDomeoConversionService extends BaseTextMiningConversionServic
 			annotation.put(IOJsonLd.jsonLdType, "ao:Qualifier");
 			annotation.put(IORdfs.label, "Qualifier");
 			annotation.put("pav:createdWith", "urn:domeo:software:id:Domeo-2.0alpha-040");
-			annotation.put("pav:importedBy", "urn:domeo:software:id:EbiConnector-0.1-001");
+			annotation.put("pav:importedBy", "urn:annotopia:software:id:CnEbiConnector-0.1-001");
 			annotation.put("pav:createdBy", "http://wwwdev.ebi.ac.uk/webservices/europepmc/");
 			annotation.put("pav:importedFrom","http://wwwdev.ebi.ac.uk/webservices/europepmc/");
 			annotation.put("pav:lastSavedOn", dateFormat.format(new Date( )));
